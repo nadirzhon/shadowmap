@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SHADOWMAP — Live Cyber Threat Map</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #040810; color: #fff; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; display: flex; }
+
+    #sidebar {
+      width: 210px; flex-shrink: 0;
+      background: rgba(2,5,12,0.95);
+      border-right: 1px solid rgba(0,255,136,0.12);
+      padding: 12px 10px;
+      display: flex; flex-direction: column; gap: 11px;
+      overflow-y: auto; z-index: 1000;
+    }
+    .brand { border-bottom: 1px solid rgba(0,255,136,0.18); padding-bottom: 9px; }
+    .brand-name { color: #00ff88; font-size: 14px; font-weight: bold; letter-spacing: 3px; }
+    .brand-sub  { color: rgba(0,255,136,0.38); font-size: 8px; letter-spacing: 1px; }
+
+    .counter-box {
+      background: rgba(255,51,51,0.07);
+      border: 1px solid rgba(255,51,51,0.22);
+      border-radius: 3px; padding: 8px 10px;
+    }
+    .counter-label { color: rgba(255,255,255,0.3); font-size: 8px; letter-spacing: 1px; }
+    .counter-value { color: #ff3333; font-size: 30px; font-weight: bold; line-height: 1.05; text-shadow: 0 0 20px #ff333355; }
+
+    .section-label { color: rgba(0,255,136,0.45); font-size: 8px; letter-spacing: 1.5px; margin-bottom: 5px; }
+    .cc-row { display: flex; align-items: center; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 9px; }
+    .cc-count { color: #ff6666; font-weight: bold; }
+
+    .type-row { margin-bottom: 5px; }
+    .type-header { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 8px; color: rgba(255,255,255,0.5); }
+    .type-bar-bg { height: 2px; background: rgba(255,255,255,0.06); border-radius: 1px; }
+    .type-bar    { height: 2px; border-radius: 1px; transition: width 0.5s; }
+
+    #map-area { flex: 1; position: relative; }
+    #map { width: 100%; height: 100%; }
+    #arc-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 500; }
+
+    #topbar {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 600;
+      padding: 7px 14px; background: rgba(4,8,16,0.9);
+      border-bottom: 1px solid rgba(0,255,136,0.1);
+      display: flex; align-items: center; justify-content: space-between;
+      backdrop-filter: blur(6px);
+    }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #ff3333; box-shadow: 0 0 10px #ff3333; margin-right: 8px; }
+    .live-text { color: rgba(0,255,136,0.75); font-size: 9px; letter-spacing: 2.5px; }
+    .utc-time  { color: rgba(255,255,255,0.2); font-size: 8px; }
+
+    #feed-bar {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 600;
+      background: rgba(4,8,16,0.9); border-top: 1px solid rgba(0,255,136,0.1);
+      padding: 6px 12px; backdrop-filter: blur(6px);
+    }
+    .feed-label { color: rgba(0,255,136,0.4); font-size: 8px; letter-spacing: 1.5px; margin-bottom: 3px; }
+    .feed-row { display: flex; align-items: center; gap: 8px; padding: 1.5px 0; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 8px; }
+    .feed-ts   { color: rgba(255,255,255,0.2); min-width: 55px; flex-shrink: 0; }
+    .feed-type { min-width: 105px; flex-shrink: 0; }
+    .feed-route{ color: rgba(255,255,255,0.45); flex: 1; overflow: hidden; white-space: nowrap; }
+    .feed-cred { color: rgba(255,210,80,0.5); flex-shrink: 0; }
+
+    .speed-section { margin-top: auto; }
+    input[type=range] { width: 100%; accent-color: #00ff88; cursor: pointer; }
+
+    .legend { display: flex; gap: 12px; padding-top: 6px; border-top: 1px solid rgba(0,255,136,0.1); }
+    .legend-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .legend-txt { color: rgba(255,255,255,0.3); font-size: 8px; }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div class="brand">
+    <div class="brand-name">SHADOWMAP</div>
+    <div class="brand-sub">LIVE THREAT MONITOR</div>
+  </div>
+
+  <div class="counter-box">
+    <div class="counter-label">TOTAL ATTACKS</div>
+    <div class="counter-value" id="total">0</div>
+  </div>
+
+  <div>
+    <div class="section-label">▲ TOP SOURCES</div>
+    <div id="cc-list"></div>
+  </div>
+
+  <div>
+    <div class="section-label">⚡ ATTACK TYPES</div>
+    <div id="type-list"></div>
+  </div>
+
+  <div class="speed-section">
+    <div class="section-label">DEMO SPEED</div>
+    <input type="range" id="speed" min="0.5" max="7" step="0.5" value="1">
+  </div>
+
+  <div class="legend">
+    <div style="display:flex;align-items:center;gap:4px">
+      <div class="legend-dot" style="background:#ff4444;box-shadow:0 0 6px #ff4444"></div>
+      <span class="legend-txt">Source</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px">
+      <div class="legend-dot" style="background:#1a88ff;box-shadow:0 0 6px #1a88ff"></div>
+      <span class="legend-txt">Target</span>
+    </div>
+  </div>
+</div>
+
+<!-- MAP -->
+<div id="map-area">
+  <div id="map"></div>
+  <canvas id="arc-canvas"></canvas>
+
+  <div id="topbar">
+    <div style="display:flex;align-items:center">
+      <div class="live-dot"></div>
+      <span class="live-text">LIVE THREAT MONITORING</span>
+    </div>
+    <span class="utc-time" id="utctime"></span>
+  </div>
+
+  <div id="feed-bar">
+    <div class="feed-label">LIVE FEED</div>
+    <div id="feed"></div>
+  </div>
+</div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────
+const WS_URL = `ws://${location.host}/ws`;
+const TYPE_COLORS = {
+  "SSH Brute Force": "#ff3333",
+  "RDP Attack":      "#ff6b00",
+  "Web Shell":       "#ff0099",
+  "Port Scan":       "#ffd700",
+  "SQL Injection":   "#bf5fff",
+};
+const CC_FLAGS = {RU:"🇷🇺",CN:"🇨🇳",KR:"🇰🇷",IR:"🇮🇷",RO:"🇷🇴",IN:"🇮🇳",BR:"🇧🇷",NG:"🇳🇬",UA:"🇺🇦",ID:"🇮🇩",NL:"🇳🇱",HK:"🇭🇰",US:"🇺🇸",GB:"🇬🇧",JP:"🇯🇵",DE:"🇩🇪",SG:"🇸🇬",FR:"🇫🇷",AU:"🇦🇺",CA:"🇨🇦",AE:"🇦🇪"};
+
+// ── Leaflet map ────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: false, attributionControl: false, minZoom: 2, maxZoom: 6 }).setView([30, 10], 2);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd' }).addTo(map);
+
+// ── Canvas arc overlay ─────────────────────────────────────────────────
+const canvas = document.getElementById('arc-canvas');
+const ctx    = canvas.getContext('2d');
+
+function resizeCanvas() {
+  canvas.width  = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Project lat/lon via Leaflet
+function project(lat, lon) {
+  const p = map.latLngToContainerPoint([lat, lon]);
+  return [p.x, p.y];
+}
+
+// Bezier control point
+function cpOf(x1,y1,x2,y2) {
+  const mx=(x1+x2)/2, my=(y1+y2)/2;
+  const d=Math.hypot(x2-x1,y2-y1), c=Math.min(d*.38,110);
+  const [dx,dy]=[x2-x1,y2-y1], l=Math.hypot(dx,dy)||1;
+  return [mx-(dy/l)*c, my+(dx/l)*c];
+}
+function qb(t,x1,y1,cx,cy,x2,y2) {
+  const m=1-t;
+  return [m*m*x1+2*m*t*cx+t*t*x2, m*m*y1+2*m*t*cy+t*t*y2];
+}
+
+// ── Arc state ──────────────────────────────────────────────────────────
+let arcs=[], rings=[], pulses=[];
+let speed=1;
+document.getElementById('speed').addEventListener('input', e => speed = +e.target.value);
+
+map.on('move zoom', () => {
+  arcs.forEach(a => {
+    const [sx,sy] = project(a.slat, a.slon);
+    const [dx,dy] = project(a.dlat, a.dlon);
+    const [cpx,cpy] = cpOf(sx,sy,dx,dy);
+    a.sx=sx; a.sy=sy; a.dx=dx; a.dy=dy; a.cpx=cpx; a.cpy=cpy;
+  });
+});
+
+// ── Stats ──────────────────────────────────────────────────────────────
+let total=0, byCC={}, byType={}, feedItems=[];
+
+function updateUI() {
+  document.getElementById('total').textContent = total.toLocaleString();
+
+  const ccEl = document.getElementById('cc-list');
+  const top = Object.entries(byCC).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  ccEl.innerHTML = top.map(([cc,n]) =>
+    `<div class="cc-row"><span>${CC_FLAGS[cc]||"🌐"} ${cc}</span><span class="cc-count">${n}</span></div>`
+  ).join('');
+
+  const typeEl = document.getElementById('type-list');
+  const maxN = Math.max(...Object.values(byType),1);
+  typeEl.innerHTML = Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,n]) => {
+    const col = TYPE_COLORS[t]||'#fff';
+    return `<div class="type-row">
+      <div class="type-header"><span>${t}</span><span style="color:${col}">${n}</span></div>
+      <div class="type-bar-bg"><div class="type-bar" style="width:${(n/maxN)*100}%;background:${col};box-shadow:0 0 5px ${col}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function updateFeed(ev) {
+  feedItems.unshift(ev);
+  feedItems = feedItems.slice(0,7);
+  const el = document.getElementById('feed');
+  el.innerHTML = feedItems.map(a => {
+    const col = TYPE_COLORS[a.attack_type]||'#fff';
+    return `<div class="feed-row">
+      <span class="feed-ts">${a.ts}</span>
+      <span class="feed-type" style="color:${col}">${a.attack_type}</span>
+      <span class="feed-route">${CC_FLAGS[a.src_cc]||''}${a.src_city} → ${CC_FLAGS[a.dst_cc]||''}${a.dst_city}</span>
+      <span class="feed-cred">:${a.port} ${a.username||''}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Handle incoming event ──────────────────────────────────────────────
+function handleEvent(ev) {
+  if (ev.type === 'stats') { total=ev.total; byCC={...ev.by_country}; byType={...ev.by_type}; updateUI(); return; }
+  total++;
+  byCC[ev.src_cc] = (byCC[ev.src_cc]||0)+1;
+  byType[ev.attack_type] = (byType[ev.attack_type]||0)+1;
+  ev.ts = new Date().toLocaleTimeString('en-GB',{hour12:false});
+
+  const [sx,sy] = project(ev.src_lat, ev.src_lon);
+  const [dx,dy] = project(ev.dst_lat, ev.dst_lon);
+  const [cpx,cpy] = cpOf(sx,sy,dx,dy);
+  arcs.push({slat:ev.src_lat,slon:ev.src_lon,dlat:ev.dst_lat,dlon:ev.dst_lon,sx,sy,dx,dy,cpx,cpy,p:0,color:TYPE_COLORS[ev.attack_type]||'#ff3333'});
+  rings.push({x:sx,y:sy,r:5,a:0.9,color:TYPE_COLORS[ev.attack_type]||'#ff3333'});
+
+  if (total%3===0) { updateUI(); }
+  updateFeed(ev);
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────
+let wsReady = false;
+function connect() {
+  try {
+    const ws = new WebSocket(WS_URL);
+    ws.onopen    = () => { wsReady=true; console.log('[WS] Connected'); };
+    ws.onmessage = e  => handleEvent(JSON.parse(e.data));
+    ws.onerror   = () => { wsReady=false; startDemo(); };
+    ws.onclose   = () => { wsReady=false; setTimeout(connect, 3000); };
+  } catch(e) { startDemo(); }
+}
+
+// Demo mode fallback
+const DEMO_CITIES=[
+  {city:"Moscow",cc:"RU",lat:55.75,lon:37.62},{city:"Beijing",cc:"CN",lat:39.91,lon:116.39},
+  {city:"Seoul",cc:"KR",lat:37.57,lon:126.98},{city:"Tehran",cc:"IR",lat:35.70,lon:51.42},
+  {city:"Bucharest",cc:"RO",lat:44.43,lon:26.10},{city:"Mumbai",cc:"IN",lat:19.08,lon:72.88},
+  {city:"São Paulo",cc:"BR",lat:-23.55,lon:-46.63},{city:"Lagos",cc:"NG",lat:6.52,lon:3.38},
+];
+const DEMO_TARGETS=[
+  {city:"New York",cc:"US",lat:40.71,lon:-74.01},{city:"London",cc:"GB",lat:51.51,lon:-0.13},
+  {city:"Tokyo",cc:"JP",lat:35.68,lon:139.69},{city:"Frankfurt",cc:"DE",lat:50.11,lon:8.68},
+  {city:"Singapore",cc:"SG",lat:1.36,lon:103.82},{city:"Paris",cc:"FR",lat:48.86,lon:2.35},
+];
+const DEMO_TYPES=["SSH Brute Force","RDP Attack","Web Shell","Port Scan","SQL Injection"];
+const USERNAMES=["root","admin","ubuntu","pi","test","oracle","postgres","deploy"];
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const rnd=(mn,mx)=>Math.floor(Math.random()*(mx-mn)+mn);
+
+let demoRunning=false;
+function startDemo() {
+  if (demoRunning || wsReady) return;
+  demoRunning=true;
+  const loop=()=>{
+    if (wsReady) {demoRunning=false;return;}
+    const src=pick(DEMO_CITIES), dst=pick(DEMO_TARGETS), type=pick(DEMO_TYPES);
+    handleEvent({src_lat:src.lat,src_lon:src.lon,src_city:src.city,src_cc:src.cc,
+      dst_lat:dst.lat,dst_lon:dst.lon,dst_city:dst.city,dst_cc:dst.cc,
+      attack_type:type,port:type==="SSH Brute Force"?22:type==="RDP Attack"?3389:80,
+      username:pick(USERNAMES),password:"123456"});
+    setTimeout(loop, Math.max(150,900/speed)+Math.random()*350);
+  };
+  loop();
+}
+
+// ── Render loop ────────────────────────────────────────────────────────
+function render() {
+  const W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  rings = rings.filter(r=>r.a>0.02).map(r=>{
+    ctx.strokeStyle=r.color; ctx.globalAlpha=r.a;
+    ctx.lineWidth=1.2; ctx.shadowBlur=8; ctx.shadowColor=r.color;
+    ctx.beginPath(); ctx.arc(r.x,r.y,r.r,0,Math.PI*2); ctx.stroke();
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
+    return{...r,r:r.r+1.4,a:r.a*0.91};
+  });
+
+  arcs = arcs.filter(a=>a.p<1.45).map(a=>{
+    const t=Math.min(a.p,1), tail=Math.max(0,t-0.28);
+    ctx.beginPath();
+    for(let i=0;i<=55;i++){
+      const st=tail+(t-tail)*(i/55);
+      const[px,py]=qb(st,a.sx,a.sy,a.cpx,a.cpy,a.dx,a.dy);
+      i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+    }
+    const alpha=a.p>0.88?(1.45-a.p)/0.57:0.82;
+    ctx.strokeStyle=a.color; ctx.globalAlpha=alpha*0.8;
+    ctx.lineWidth=1.6; ctx.shadowBlur=7; ctx.shadowColor=a.color; ctx.stroke();
+    if(t<1){
+      const[px,py]=qb(t,a.sx,a.sy,a.cpx,a.cpy,a.dx,a.dy);
+      ctx.shadowBlur=22; ctx.shadowColor='#fff'; ctx.fillStyle='#fff'; ctx.globalAlpha=alpha;
+      ctx.beginPath(); ctx.arc(px,py,2.8,0,Math.PI*2); ctx.fill();
+      if(a.p>0.97&&a.p<1.03) pulses.push({x:a.dx,y:a.dy,r:4,a:1,color:a.color});
+    }
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
+    return{...a,p:a.p+0.0065*speed};
+  });
+
+  pulses = pulses.filter(p=>p.a>0.02).map(p=>{
+    ctx.strokeStyle=p.color; ctx.globalAlpha=p.a;
+    ctx.lineWidth=2; ctx.shadowBlur=14; ctx.shadowColor=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.stroke();
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
+    return{...p,r:p.r+2.2,a:p.a*0.85};
+  });
+
+  requestAnimationFrame(render);
+}
+
+// ── UTC clock ──────────────────────────────────────────────────────────
+setInterval(()=>{document.getElementById('utctime').textContent=new Date().toUTCString();},1000);
+
+// ── Init ───────────────────────────────────────────────────────────────
+connect();
+setTimeout(()=>{ if(!wsReady) startDemo(); }, 2000);
+render();
+</script>
+</body>
+</html>

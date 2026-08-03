@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+      - name: Import check
+        run: |
+          cd backend
+          python -c "import main; print('Import OK')"
+      - name: Lint
+        run: |
+          pip install flake8
+          flake8 backend/main.py --max-line-length=120 --ignore=E302,W503 || true

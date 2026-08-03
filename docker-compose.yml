@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  shadowmap:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./frontend:/frontend
+    environment:
+      - DEMO_MODE=auto
+      - DEMO_INTERVAL=0.8
+      - GEOIP_ENABLED=true
+    restart: unless-stopped
+
+  # Uncomment to run alongside ssh-honeypot:
+  # honeypot:
+  #   build: ../ssh-honeypot
+  #   ports:
+  #     - "2222:2222"
+  #   volumes:
+  #     - ./backend/honeypot.db:/app/honeypot.db

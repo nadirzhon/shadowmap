@@ -2,19 +2,14 @@
 
 ## Reporting a Vulnerability
 
-Do **not** open public GitHub issues for security vulnerabilities.
+If you discover a security vulnerability in this project, please do **not** open a public issue. Report it privately to the maintainer and allow reasonable time for a fix before public disclosure.
 
-Email: security@nadirzhon.dev  
-Response time: 48–72 hours
+## Responsible Use
 
-## Scope
+This tool is intended for **authorized security testing only**. Use it exclusively against systems you own or have explicit written permission to test. Unauthorized use against third-party systems may be illegal in your jurisdiction.
 
-- Backend WebSocket server (FastAPI)
-- Frontend JavaScript (canvas, Leaflet integration)
-- GeoIP lookup handling
-- Honeypot DB access
+## Handling of Secrets
 
-## Legal Note
-
-SHADOWMAP is a **visualization and monitoring tool**.
-It must only be used with attack data you own or have permission to process.
+- API keys and credentials are read from environment variables or config files that are git-ignored.
+- Never commit real keys, tokens, or credentials.
+- Example configs use placeholder values only.
